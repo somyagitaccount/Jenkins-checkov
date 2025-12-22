@@ -30,7 +30,7 @@ pipeline {
 
     /* ---------------- FULL SCAN ---------------- */
     stage('Run Checkov Terraform Scan') {
-      steps {
+       steps {
         sh '''
           set +x
           echo "▶ Running Checkov Terraform scan"
@@ -50,31 +50,34 @@ pipeline {
 
     /* ---------------- PR DECORATION ---------------- */
     stage('Decorate Pull Request') {
-      when {
-        expression { env.CHANGE_ID != null }
-      }
-      steps {
-        sh '''
-          set +x
-          echo "▶ Decorating PR with Checkov results"
+  when {
+    expression { env.CHANGE_ID != null }
+  }
+  steps {
+    withCredentials([
+      string(credentialsId: 'github-pat', variable: 'GITHUB_TOKEN')
+    ]) {
+      sh '''
+        set +x
+        echo "▶ Decorating PR with Checkov results"
 
-          PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
-          export PATH="$PATH:$USER_BIN"
+        PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+        export PATH="$PATH:$USER_BIN"
 
-          REPO_URL="${GIT_URL%.git}"
-          OWNER_REPO="${REPO_URL##*/github.com/}"
+        REPO_URL="${GIT_URL%.git}"
+        OWNER_REPO="${REPO_URL##*/github.com/}"
 
-          checkov \
-            --directory . \
-            --repo-id "$OWNER_REPO" \
-            --pr-number "${CHANGE_ID}" \
-            --github-token "$GITHUB_TOKEN" \
-            --quiet
-        '''
-      }
+        checkov \
+          --directory . \
+          --repo-id "$OWNER_REPO" \
+          --pr-number "${CHANGE_ID}" \
+          --github-token "$GITHUB_TOKEN" \
+          --quiet
+      '''
     }
   }
+}
 
   post {
     success {
