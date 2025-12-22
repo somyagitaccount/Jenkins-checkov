@@ -14,6 +14,7 @@ pipeline {
 
   environment {
     GITHUB_TOKEN = credentials('github-token')
+    PATH = "${env.PATH}:/usr/local/bin:/opt/homebrew/bin"
   }
 
   stages {
