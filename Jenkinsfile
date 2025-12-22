@@ -15,22 +15,26 @@ pipeline {
           set +x
           python3 --version
           
-          # Check if checkov is already installed
-          if command -v checkov &> /dev/null; then
+          # Detect Python version for user bin path
+          PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          USER_BIN_PATH="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+          
+          # Add user bin path to PATH for checking
+          export PATH="$PATH:$USER_BIN_PATH"
+          
+          # Check if checkov is already installed (either in PATH or in user bin)
+          if command -v checkov &> /dev/null || [ -f "$USER_BIN_PATH/checkov" ]; then
             echo "✅ Checkov is already installed"
-            checkov --version
+            if command -v checkov &> /dev/null; then
+              checkov --version
+            else
+              "$USER_BIN_PATH/checkov" --version
+            fi
           else
             echo "📦 Checkov not found. Installing..."
             
-            # Detect Python version for user bin path
-            PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-            USER_BIN_PATH="$HOME/Library/Python/${PYTHON_VERSION}/bin"
-            
             # Install checkov
             pip3 install --user checkov > /dev/null 2>&1
-            
-            # Add to PATH for this session
-            export PATH="$PATH:$USER_BIN_PATH"
             
             # Verify installation
             if [ -f "$USER_BIN_PATH/checkov" ]; then
