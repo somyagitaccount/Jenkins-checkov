@@ -7,10 +7,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
-  environment {
-    GITHUB_TOKEN = credentials('github-token')
-  }
-
   stages {
 
     stage('Install Checkov') {
