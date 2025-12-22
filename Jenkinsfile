@@ -1,9 +1,5 @@
 pipeline {
-  agent {
-    docker {
-      image 'bridgecrew/checkov:latest'
-    }
-  }
+  agent any
 
   options {
     timestamps()
@@ -13,10 +9,20 @@ pipeline {
 
   environment {
     GITHUB_TOKEN = credentials('github-token')
-    PATH = "${env.PATH}:/usr/local/bin:/opt/homebrew/bin"
   }
 
   stages {
+
+    stage('Install Checkov') {
+      steps {
+        sh '''
+          python3 --version
+          pip3 install --user checkov
+          export PATH=$PATH:$HOME/Library/Python/3.9/bin
+          checkov --version
+        '''
+      }
+    }
 
     stage('Validate PR Context') {
       when {
@@ -40,11 +46,8 @@ pipeline {
         sh '''
           set -e
 
-          # Extract owner/repo from GIT_URL
           REPO_URL="${GIT_URL%.git}"
           OWNER_REPO="${REPO_URL##*/github.com/}"
-
-          echo "Running Checkov PR scan on $OWNER_REPO PR #${CHANGE_ID}"
 
           checkov \
             --directory . \
