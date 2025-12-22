@@ -8,11 +8,6 @@ pipeline {
     }
     
     parameters {
-        string(
-            name: 'LOCAL_PROJECT_PATH',
-            defaultValue: '/Users/somya.agarwal/Downloads/identity-oidc-provider-tf-test',
-            description: 'Local filesystem path to project directory'
-        )
         choice(
             name: 'ENVIRONMENT',
             choices: ['dev'],
@@ -39,55 +34,25 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
-                    // Try SCM checkout if available, otherwise copy from local filesystem
+                    // Checkout from GitHub repository
                     try {
+                        // Try SCM checkout first (if configured in Jenkins job)
                         checkout scm
                         echo "✓ Code checked out from SCM"
                     } catch (Exception e) {
-                        echo "SCM checkout not available - copying from local filesystem"
-                        
-                        def localPath = params.LOCAL_PROJECT_PATH.trim()
-                        echo "Copying files from: ${localPath}"
-                        echo "To workspace: ${env.WORKSPACE}"
-                        
-                        // Verify local path exists
-                        def pathExists = sh(
-                            script: "test -d '${localPath}' && echo 'exists' || echo 'notfound'",
-                            returnStdout: true
-                        ).trim()
-                        
-                        if (pathExists != 'exists') {
-                            error("""
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    PROJECT PATH NOT FOUND                                ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║ The local project path does not exist: ${localPath}                       ║
-║                                                                          ║
-║ Please update the LOCAL_PROJECT_PATH parameter to the correct path.      ║
-╚══════════════════════════════════════════════════════════════════════════╝
-                            """)
-                        }
-                        
-                        // Copy all files from local directory to workspace
-                        sh """
-                            # Copy all files and directories
-                            cp -r '${localPath}'/* . 2>/dev/null || true
-                            
-                            # Copy hidden files (like .checkov.yml, .gitignore)
-                            cp '${localPath}'/.checkov.yml . 2>/dev/null || true
-                            cp '${localPath}'/.gitignore . 2>/dev/null || true
-                            
-                            # Verify Jenkinsfile was copied
-                            if [ ! -f Jenkinsfile ]; then
-                                echo "ERROR: Jenkinsfile not found after copy!"
-                                ls -la
-                                exit 1
-                            fi
-                            
-                            echo "✓ Files copied successfully"
-                            echo "Workspace contents:"
-                            ls -la
-                        """
+                        // Fallback: explicit Git checkout from GitHub
+                        echo "SCM not configured, checking out directly from GitHub..."
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: '*/dev']],
+                            doGenerateSubmoduleConfigurations: false,
+                            extensions: [],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[
+                                url: 'https://github.com/somyagitaccount/Jenkins-checkov.git'
+                            ]]
+                        ])
+                        echo "✓ Code checked out from GitHub repository (dev branch)"
                     }
                 }
             }
