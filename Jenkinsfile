@@ -1,98 +1,69 @@
 pipeline {
-    agent {
-        docker {
-            image 'hashicorp/terraform:1.5'
-            args '--entrypoint=""'
-        }
+  agent {
+    docker {
+      image 'bridgecrew/checkov:latest'
+      args '--entrypoint=""'
+    }
+  }
+
+  options {
+    timestamps()
+    timeout(time: 20, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    GITHUB_TOKEN = credentials('github-token')
+  }
+
+  stages {
+
+    stage('Validate PR Context') {
+      when {
+        expression { env.CHANGE_ID != null }
+      }
+      steps {
+        echo """
+        Pull Request detected
+        PR Number : ${CHANGE_ID}
+        Source    : ${CHANGE_BRANCH}
+        Target    : ${CHANGE_TARGET}
+        """
+      }
     }
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 30, unit: 'MINUTES')
-        timestamps()
+    stage('Run Checkov & Decorate PR') {
+      when {
+        expression { env.CHANGE_ID != null }
+      }
+      steps {
+        sh '''
+          set -e
+
+          # Extract owner/repo from GIT_URL
+          REPO_URL="${GIT_URL%.git}"
+          OWNER_REPO="${REPO_URL##*/github.com/}"
+
+          echo "Running Checkov PR scan on $OWNER_REPO PR #${CHANGE_ID}"
+
+          checkov \
+            --directory . \
+            --framework terraform \
+            --repo-id "$OWNER_REPO" \
+            --pr-number "${CHANGE_ID}" \
+            --github-token "${GITHUB_TOKEN}" \
+            --quiet
+        '''
+      }
     }
+  }
 
-    parameters {
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['dev'],
-            description: 'Select the environment to validate'
-        )
-        booleanParam(
-            name: 'RUN_TERRAFORM_FMT',
-            defaultValue: true,
-            description: 'Run terraform fmt check'
-        )
-        booleanParam(
-            name: 'RUN_TERRAFORM_VALIDATE',
-            defaultValue: true,
-            description: 'Run terraform validate'
-        )
-        booleanParam(
-            name: 'RUN_CHECKOV',
-            defaultValue: true,
-            description: 'Run Checkov security scan'
-        )
+  post {
+    success {
+      echo "✅ Checkov completed — results posted directly to PR"
     }
-
-    stages {
-
-        stage('Install Tools') {
-            steps {
-                sh '''
-                    apk add --no-cache python3 py3-pip git
-                    pip3 install --no-cache-dir checkov
-                    terraform version
-                    checkov --version
-                '''
-            }
-        }
-
-        stage('Terraform Format Check') {
-            when {
-                expression { params.RUN_TERRAFORM_FMT }
-            }
-            steps {
-                sh 'terraform fmt -check -recursive -diff projects/'
-            }
-        }
-
-        stage('Terraform Validate') {
-            when {
-                expression { params.RUN_TERRAFORM_VALIDATE }
-            }
-            steps {
-                dir("projects/nonprod/${params.ENVIRONMENT}") {
-                    sh '''
-                        terraform init -backend=false
-                        terraform validate
-                    '''
-                }
-            }
-        }
-
-        stage('Checkov Security Scan') {
-            when {
-                expression { params.RUN_CHECKOV }
-            }
-            steps {
-                sh """
-                    checkov -d projects/nonprod/${params.ENVIRONMENT} \
-                      --framework terraform \
-                      --config-file .checkov.yml \
-                      --output cli \
-                      --compact
-                """
-            }
-        }
+    failure {
+      echo "❌ Checkov failed — see PR comments for findings"
     }
-
-    post {
-        success {
-            echo "✓ Pipeline completed successfully"
-        }
-        failure {
-            echo "✗ Pipeline failed due to Terraform or security violations"
-        }
-    }
+  }
 }
