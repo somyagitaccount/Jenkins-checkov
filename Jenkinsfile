@@ -2,96 +2,105 @@ pipeline {
   agent any
 
   options {
-    timestamps()
     timeout(time: 20, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
+  environment {
+    CHECKOV_OUTPUT = "checkov-results.json"
+  }
+
   stages {
 
+    /* ---------------- INSTALL ---------------- */
     stage('Install Checkov') {
       steps {
         sh '''
           set +x
-          python3 --version
-          
-          # Detect Python version for user bin path
+          echo "▶ Ensuring Checkov is available"
+
           PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          USER_BIN_PATH="$HOME/Library/Python/${PYTHON_VERSION}/bin"
-          
-          # Add user bin path to PATH for checking
-          export PATH="$PATH:$USER_BIN_PATH"
-          
-          # Check if checkov is already installed (either in PATH or in user bin)
-          if command -v checkov &> /dev/null || [ -f "$USER_BIN_PATH/checkov" ]; then
-            echo "✅ Checkov is already installed"
-            if command -v checkov &> /dev/null; then
-              checkov --version
-            else
-              "$USER_BIN_PATH/checkov" --version
-            fi
-          else
-            echo "📦 Checkov not found. Installing..."
-            
-            # Install checkov
-            pip3 install --user checkov > /dev/null 2>&1
-            
-            # Verify installation
-            if [ -f "$USER_BIN_PATH/checkov" ]; then
-              echo "✅ Checkov installed successfully"
-              "$USER_BIN_PATH/checkov" --version
-            else
-              echo "❌ Checkov installation failed"
-              exit 1
-            fi
+          USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+          export PATH="$PATH:$USER_BIN"
+
+          if ! command -v checkov >/dev/null 2>&1; then
+            pip3 install --user checkov --quiet
           fi
+
+          echo "✔ Checkov ready: $(checkov --version)"
         '''
       }
     }
 
-    stage('Validate PR Context') {
-      when {
-        expression { env.CHANGE_ID != null }
-      }
+    /* ---------------- FULL SCAN ---------------- */
+    stage('Run Full Checkov Scan') {
       steps {
-        echo """
-        Pull Request detected
-        PR Number : ${CHANGE_ID}
-        Source    : ${CHANGE_BRANCH}
-        Target    : ${CHANGE_TARGET}
-        """
+        sh '''
+          set +x
+          echo "▶ Running full Checkov scan (all frameworks)"
+
+          PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+          export PATH="$PATH:$USER_BIN"
+
+          # Run scan and capture output
+          checkov \
+            --directory . \
+            --output json \
+            --output-file-path . \
+            --quiet || true
+
+          echo "✔ Scan completed"
+        '''
       }
     }
 
-    stage('Run Checkov & Decorate PR') {
+    /* ---------------- SUMMARY ---------------- */
+    stage('Checkov Scan Summary') {
+      steps {
+        sh '''
+          set +x
+          echo "▶ Checkov Scan Summary"
+
+          python3 - << 'EOF'
+import json
+
+with open("checkov-results.json") as f:
+    data = json.load(f)
+
+summary = data.get("summary", {})
+
+print(f"✅ Passed : {summary.get('passed', 0)}")
+print(f"❌ Failed : {summary.get('failed', 0)}")
+print(f"⏭ Skipped: {summary.get('skipped', 0)}")
+print(f"ℹ️  Parsing Errors: {summary.get('parsing_errors', 0)}")
+EOF
+        '''
+      }
+    }
+
+    /* ---------------- PR DECORATION ---------------- */
+    stage('Decorate Pull Request') {
       when {
         expression { env.CHANGE_ID != null }
       }
       steps {
         sh '''
-          set -e
+          set +x
+          echo "▶ Decorating PR with Checkov results"
 
-          # Ensure checkov is in PATH (in case it was just installed)
           PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          USER_BIN_PATH="$HOME/Library/Python/${PYTHON_VERSION}/bin"
-          export PATH="$PATH:$USER_BIN_PATH"
-
-          # Verify checkov is available
-          if ! command -v checkov &> /dev/null; then
-            echo "❌ Error: checkov command not found"
-            exit 1
-          fi
+          USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+          export PATH="$PATH:$USER_BIN"
 
           REPO_URL="${GIT_URL%.git}"
           OWNER_REPO="${REPO_URL##*/github.com/}"
 
-          echo "Running Checkov PR scan on $OWNER_REPO PR #${CHANGE_ID}"
-
           checkov \
             --directory . \
-            --framework terraform \
             --repo-id "$OWNER_REPO" \
             --pr-number "${CHANGE_ID}" \
+            --github-token "$GITHUB_TOKEN" \
             --quiet
         '''
       }
@@ -100,10 +109,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ Checkov completed — results posted directly to PR"
+      echo "✅ Checkov completed successfully"
     }
     failure {
-      echo "❌ Checkov failed — see PR comments for findings"
+      echo "❌ Checkov detected policy violations"
     }
   }
 }
