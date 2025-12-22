@@ -12,7 +12,7 @@ pipeline {
     stage('Install Checkov') {
       steps {
         sh '''
-          set +e
+          set +x
           python3 --version
           
           # Check if checkov is already installed
@@ -27,7 +27,7 @@ pipeline {
             USER_BIN_PATH="$HOME/Library/Python/${PYTHON_VERSION}/bin"
             
             # Install checkov
-            pip3 install --user checkov
+            pip3 install --user checkov > /dev/null 2>&1
             
             # Add to PATH for this session
             export PATH="$PATH:$USER_BIN_PATH"
