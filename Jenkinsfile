@@ -2,7 +2,6 @@ pipeline {
   agent {
     docker {
       image 'bridgecrew/checkov:latest'
-      args '--entrypoint=""'
     }
   }
 
