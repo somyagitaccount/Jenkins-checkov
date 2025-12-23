@@ -50,16 +50,13 @@ pipeline {
 
     /* ---------------- PR DECORATION ---------------- */
     stage('Decorate Pull Request') {
-      when {
-        expression { env.CHANGE_ID != null }
-      }
       steps {
         withCredentials([
           string(credentialsId: 'github-pat', variable: 'GITHUB_TOKEN')
         ]) {
           sh '''
             set +x
-            echo "▶ Decorating PR with Checkov results"
+            echo "▶ Attempting to decorate PR with Checkov results"
 
             PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
             USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
@@ -68,11 +65,32 @@ pipeline {
             REPO_URL="${GIT_URL%.git}"
             OWNER_REPO="${REPO_URL##*/github.com/}"
 
+            # Try to get PR number from various Jenkins environment variables
+            PR_NUMBER="${CHANGE_ID:-${ghprbPullId:-${PR_NUMBER}}}"
+            
+            # If still not found, try to extract from branch name
+            if [ -z "$PR_NUMBER" ]; then
+              BRANCH="${GIT_BRANCH:-${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}}"
+              if [ -n "$BRANCH" ]; then
+                # Try to extract from branch name (e.g., PR-123, pr/123, pull/123, origin/pr/123)
+                PR_NUMBER=$(echo "$BRANCH" | grep -oE '(PR-|pr/|pull/)[0-9]+' | grep -oE '[0-9]+' | head -1)
+              fi
+            fi
+
+            if [ -z "$PR_NUMBER" ]; then
+              echo "⚠️ Could not determine PR number from environment variables or branch name"
+              echo "   Available env vars: CHANGE_ID=${CHANGE_ID}, ghprbPullId=${ghprbPullId}, PR_NUMBER=${PR_NUMBER}"
+              echo "   Branch: ${GIT_BRANCH:-${BRANCH_NAME:-unknown}}"
+              echo "   Skipping PR decoration - this may not be a PR build"
+              exit 0
+            fi
+
+            echo "📝 Posting results to PR #${PR_NUMBER} in repository ${OWNER_REPO}"
             # Always post results to PR conversation regardless of exit code
             checkov \
               --directory . \
               --repo-id "$OWNER_REPO" \
-              --pr-number "${CHANGE_ID}" \
+              --pr-number "${PR_NUMBER}" \
               --github-token "$GITHUB_TOKEN" \
               --compact \
               --summary-position top || true
