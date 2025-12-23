@@ -24,26 +24,35 @@ pipeline {
     }
 
     /* ---------------- FULL SCAN ---------------- */
-    stage('Run Checkov Terraform Scan') {
-      steps {
-        sh '''
-          set +x
-          echo "▶ Running Checkov Terraform scan"
+stage('Run Checkov Terraform Scan') {
+  steps {
+    sh '''
+      set +x
+      echo "▶ Running Checkov Terraform scan"
 
-          PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
-          export PATH="$PATH:$USER_BIN"
+      PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+      USER_BIN="$HOME/Library/Python/${PYTHON_VERSION}/bin"
+      export PATH="$PATH:$USER_BIN"
 
-          checkov \
-            --directory . \
-            --framework terraform \
-            --compact \
-            --summary-position top || true
+      # -------- CLI output (for summary + Jenkins logs) --------
+      checkov \
+        --directory . \
+        --framework terraform \
+        --compact \
+        --summary-position top \
+        --output cli \
+        | tee checkov.txt || true
 
+      # -------- JSON output (for PR comment) --------
+      checkov \
+        --directory . \
+        --framework terraform \
+        --output json \
+        > checkov.json || true
+    '''
+  }
+}
 
-        '''
-      }
-    }
 
     /* ---------------- PR DECORATION ---------------- */
     
