@@ -53,7 +53,7 @@ pipeline {
             }
             steps {
                 withCredentials([
-                    string(credentialsId: 'github-pat', variable: 'GITHUB_TOKEN')
+                    string(credentialsId: 'github-pat-1', variable: 'GITHUB_TOKEN')
                 ]) {
                     sh '''
 set -e
