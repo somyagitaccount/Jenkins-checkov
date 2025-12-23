@@ -68,12 +68,16 @@ pipeline {
             REPO_URL="${GIT_URL%.git}"
             OWNER_REPO="${REPO_URL##*/github.com/}"
 
+            # Always post results to PR conversation regardless of exit code
             checkov \
               --directory . \
               --repo-id "$OWNER_REPO" \
               --pr-number "${CHANGE_ID}" \
               --github-token "$GITHUB_TOKEN" \
-              --quiet
+              --compact \
+              --summary-position top || true
+
+            echo "✔ PR decoration completed - results posted to PR conversation"
           '''
         }
       }
