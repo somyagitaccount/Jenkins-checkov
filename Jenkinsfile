@@ -1,15 +1,6 @@
 pipeline {
   agent any
 
-  parameters {
-    string(name: 'PR_NUMBER', defaultValue: '', description: 'GitHub Pull Request number (leave empty to auto-detect from branch)')
-  }
-
-  options {
-    timeout(time: 20, unit: 'MINUTES')
-    buildDiscarder(logRotator(numToKeepStr: '20'))
-  }
-
   stages {
 
     /* ---------------- INSTALL ---------------- */
@@ -46,8 +37,9 @@ pipeline {
           checkov \
             --directory . \
             --framework terraform \
-            --compact \
-            --summary-position top || true
+            -o cli -o json \
+            --output-file-path checkov.json | tee checkov.txt
+
         '''
       }
     }
@@ -118,9 +110,6 @@ fi
   post {
     success {
       echo "✅ Checkov completed successfully"
-    }
-    failure {
-      echo "❌ Checkov detected policy violations"
     }
   }
 }
