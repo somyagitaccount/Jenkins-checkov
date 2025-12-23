@@ -37,8 +37,9 @@ pipeline {
           checkov \
             --directory . \
             --framework terraform \
-            -o cli -o json \
-            --output-file-path checkov.json | tee checkov.txt
+            --compact \
+            --summary-position top || true
+
 
         '''
       }
