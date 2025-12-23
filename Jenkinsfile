@@ -83,10 +83,9 @@ Commit: $GIT_COMMIT
 Summary:
 $SUMMARY
 
-JSON Results:
-$(cat checkov.json | sed 's/^/    /')
+❗ This PR introduces Terraform security findings.
+Please review the Jenkins build logs for full Checkov details.
 
-Full output available in Jenkins build logs
 EOF
 )
 
