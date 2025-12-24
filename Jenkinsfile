@@ -26,7 +26,7 @@ docker run --rm \
   -v "$PWD:/tf" \
   -w /tf \
   ${CHECKOV_IMAGE} \
-  checkov -d . \
+  -d . \
   --framework terraform \
   --output json \
   --soft-fail \
