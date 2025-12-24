@@ -52,27 +52,25 @@ EOF
     }
 
     stage('Decorate PR') {
-      when {
-        expression { env.CHANGE_ID != null }
-      }
-      steps {
-        sh '''
+  when {
+    expression { env.CHANGE_ID != null }
+  }
+  steps {
+    sh '''
 OWNER=$(echo "$GIT_URL" | sed -E 's#.*/([^/]+)/([^/.]+)(\\.git)?#\\1#')
 REPO=$(echo "$GIT_URL" | sed -E 's#.*/([^/]+)/([^/.]+)(\\.git)?#\\2#')
 
 SUMMARY=$(cat checkov.txt)
 
 COMMENT=$(cat <<EOF
-### 🔍 Checkov Terraform Scan Results
+### Checkov Terraform Scan Results
 
-**Repository:** $REPO  
-**PR:** #$CHANGE_ID  
+Repository: $REPO
+PR: #$CHANGE_ID
 
-\`\`\`
 $SUMMARY
-\`\`\`
 
-📄 Full report available in Jenkins artifacts.
+Full report available in Jenkins artifacts.
 EOF
 )
 
@@ -81,10 +79,9 @@ curl -s -X POST \
   -H "Content-Type: application/json" \
   https://api.github.com/repos/$OWNER/$REPO/issues/$CHANGE_ID/comments \
   -d "$(jq -nc --arg body "$COMMENT" '{body: $body}')"
-        '''
-      }
-    }
+    '''
   }
+}
 
   post {
     always {
