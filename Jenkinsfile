@@ -22,41 +22,41 @@ pipeline {
     stage('Run Checkov') {
       steps {
         sh '''
-        docker run --rm \
-          -v $PWD:/tf \
-          -w /tf \
-          ${CHECKOV_IMAGE} \
-          checkov -d . \
-          --framework terraform \
-          --output json \
-          --soft-fail \
-          > checkov.json
-        '''
+docker run --rm \
+  -v "$PWD:/tf" \
+  -w /tf \
+  ${CHECKOV_IMAGE} \
+  checkov -d . \
+  --framework terraform \
+  --output json \
+  --soft-fail \
+  > checkov.json
+'''
       }
     }
 
     stage('Generate Summary') {
       steps {
         sh '''
-        PASSED=$(jq '.summary.passed' checkov.json)
-        FAILED=$(jq '.summary.failed' checkov.json)
-        SKIPPED=$(jq '.summary.skipped' checkov.json)
+PASSED=$(jq '.summary.passed' checkov.json)
+FAILED=$(jq '.summary.failed' checkov.json)
+SKIPPED=$(jq '.summary.skipped' checkov.json)
 
-        cat <<EOF > checkov.txt
+cat <<EOF > checkov.txt
 Passed checks: $PASSED
 Failed checks: $FAILED
 Skipped checks: $SKIPPED
 EOF
-        '''
+'''
       }
     }
 
     stage('Decorate PR') {
-  when {
-    expression { env.CHANGE_ID != null }
-  }
-  steps {
-    sh '''
+      when {
+        expression { env.CHANGE_ID != null }
+      }
+      steps {
+        sh '''
 OWNER=$(echo "$GIT_URL" | sed -E 's#.*/([^/]+)/([^/.]+)(\\.git)?#\\1#')
 REPO=$(echo "$GIT_URL" | sed -E 's#.*/([^/]+)/([^/.]+)(\\.git)?#\\2#')
 
@@ -79,9 +79,10 @@ curl -s -X POST \
   -H "Content-Type: application/json" \
   https://api.github.com/repos/$OWNER/$REPO/issues/$CHANGE_ID/comments \
   -d "$(jq -nc --arg body "$COMMENT" '{body: $body}')"
-    '''
+'''
+      }
+    }
   }
-}
 
   post {
     always {
